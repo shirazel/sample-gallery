@@ -212,6 +212,11 @@ body.text-edit [data-edit]:hover{outline-style:solid;background:color-mix(in srg
 .pop .row{display:flex;gap:8px;align-items:center}
 .pop select,.pop input[type=number]{flex:1;border:1px solid rgba(0,0,0,.15);border-radius:4px;padding:8px;font-size:14px}
 
+.notice-wrap{position:fixed;inset:0;z-index:250;background:rgba(18,15,13,.55);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px}
+.notice-wrap.show{display:flex}
+.notice{background:#FCFBF8;border-radius:8px;padding:30px 32px;max-width:380px;width:100%;text-align:center;box-shadow:0 30px 70px -20px rgba(0,0,0,.6);border-top:3px solid var(--primary)}
+.notice-title{font-family:var(--heading-font);font-size:26px;color:var(--ink);margin-bottom:10px}
+.notice p{font-family:var(--body-font);font-size:16px;line-height:1.7;color:var(--ink);margin-bottom:20px}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:12px 22px;border-radius:999px;font-size:14px;z-index:300;opacity:0;transition:.3s;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%)}
 
@@ -297,7 +302,6 @@ body.text-edit [data-edit]:hover{outline-style:solid;background:color-mix(in srg
     <button class="close-x" style="position:static" data-close aria-label="סגירה">&times;</button>
   </div>
   <form class="drawer-body" id="artForm">
-    <div class="hint">זו גלריה לדוגמה. אפשר לנסות להוסיף יצירה ולראות איך היא נתלית על הקיר, אבל היא לא נשמרת באתר ותיעלם ברענון העמוד.</div>
     <div class="field">
       <label>תמונה</label>
       <div class="seg" id="srcSeg">
@@ -360,6 +364,14 @@ body.text-edit [data-edit]:hover{outline-style:solid;background:color-mix(in srg
     <select id="pWeight"><option value="">רגיל</option><option value="300">300</option><option value="400">400</option><option value="500">500</option><option value="600">600</option><option value="700">700</option></select></div>
   <div class="row"><label style="font-size:13px">צבע</label><input type="color" id="pColor" style="width:48px;height:34px;border:1px solid rgba(0,0,0,.15);border-radius:4px;padding:2px"></div>
   <div class="row"><button class="btn" id="pReset" style="flex:1">איפוס רכיב</button><button class="btn btn-primary" id="pDone" style="flex:1">סיום</button></div>
+</div>
+
+<div class="notice-wrap" id="notice" role="alertdialog" aria-modal="true" aria-labelledby="noticeText">
+  <div class="notice">
+    <div class="notice-title">גלריה לדוגמה</div>
+    <p id="noticeText">זה אתר לדוגמה בלבד, אי אפשר להוסיף כאן תמונות.</p>
+    <button class="copy-btn" id="noticeOk">הבנתי</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -565,7 +577,7 @@ $('#copyBtn').onclick=async()=>{
   setTimeout(()=>{ cb.textContent='העתק פרומפט'; cb.classList.remove('done'); },2000);
 };
 document.addEventListener('keydown', e=>{
-  if(e.key==='Escape'){ if($('#pop').classList.contains('show')) closePop(); else if(overlay.classList.contains('open')) closeModal(); else closeDrawers(); }
+  if(e.key==='Escape'){ if($('#notice').classList.contains('show')) $('#notice').classList.remove('show'); else if($('#pop').classList.contains('show')) closePop(); else if(overlay.classList.contains('open')) closeModal(); else closeDrawers(); }
   if(overlay.classList.contains('open')){ if(e.key==='ArrowLeft') $('#mNext').click(); if(e.key==='ArrowRight') $('#mPrev').click(); }
   else if(!e.target.closest('input,textarea,select') && !document.querySelector('.drawer.open')){
     if(e.key==='ArrowLeft') goTo(currentIndex()+1); if(e.key==='ArrowRight') goTo(currentIndex()-1);
@@ -633,22 +645,13 @@ $('#fileInput').onchange=e=>handleFile(e.target.files[0]);
 drop.addEventListener('drop',e=>handleFile(e.dataTransfer.files[0]));
 $('#urlInput').addEventListener('input',e=>{ const v=e.target.value.trim(); pendingImg=v||null; showPreview(v); });
 
+function showNotice(msg){ $('#noticeText').textContent=msg; $('#notice').classList.add('show'); setTimeout(()=>$('#noticeOk').focus(),50); }
+$('#noticeOk').onclick=()=>$('#notice').classList.remove('show');
+$('#notice').addEventListener('click',e=>{ if(e.target.id==='notice') $('#notice').classList.remove('show'); });
 $('#saveArt').onclick=()=>{
-  const title=$('#fTitle').value.trim(), author=$('#fAuthor').value.trim();
-  if(!pendingImg){ toast('צריך להוסיף תמונה'); return; }
-  if(!title){ toast('צריך למלא שם יצירה'); $('#fTitle').focus(); return; }
-  if(!author){ toast('צריך למלא שם יוצר/ת'); $('#fAuthor').focus(); return; }
-  const item={ id: editIdx!==null ? art[editIdx].id : 'a'+Date.now(), img:pendingImg, title, author, desc:$('#fDesc').value.trim(), prompt:$('#fPrompt').value.trim() };
-    let target;
-  if(editIdx!==null){ art[editIdx]=item; target=editIdx; } else { art.push(item); target=art.length-1; }
-  renderWall(); closeDrawers(); toast(editIdx!==null?'היצירה עודכנה לתצוגה בלבד':'היצירה נוספה לתצוגה. זו גלריה לדוגמה, ולכן היא תיעלם ברענון');
-  setTimeout(()=>goTo(target),350);
+  showNotice(editIdx!==null ? 'זה אתר לדוגמה בלבד, אי אפשר לערוך כאן יצירות.' : 'זה אתר לדוגמה בלבד, אי אפשר להוסיף כאן תמונות.');
 };
-$('#deleteArt').onclick=()=>{
-  if(editIdx===null) return;
-  if(!confirm('למחוק את היצירה מהתערוכה?')) return;
-  art.splice(editIdx,1); renderWall(); closeDrawers(); toast('היצירה נמחקה');
-};
+$('#deleteArt').onclick=()=>showNotice('זה אתר לדוגמה בלבד, אי אפשר למחוק כאן יצירות.');
 
 /* ===== עיצוב כללי ===== */
 function fillSelect(sel, list){ sel.innerHTML = list.map(f=>`<option value="${esc(f[0])}" style="font-family:${esc(f[0])}">${f[1]}</option>`).join(''); }
