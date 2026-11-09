@@ -240,7 +240,7 @@ body.text-edit [data-edit]:hover{outline-style:solid;background:color-mix(in srg
   <div class="brand-mark" data-edit="brandMark">Virtual Gallery</div>
   <div class="top-actions">
     <button class="btn" id="openDesign">עיצוב</button>
-    
+    <button class="btn btn-primary" id="openAdd">הוסף יצירה לתערוכה</button>
   </div>
 </div>
 
@@ -278,7 +278,7 @@ body.text-edit [data-edit]:hover{outline-style:solid;background:color-mix(in srg
       </div>
       <div class="modal-actions">
         <button class="copy-btn" id="copyBtn">העתק פרומפט</button>
-        
+        <button class="btn" id="mEdit">עריכה</button>
         <div class="modal-nav" style="margin-inline-start:auto">
           <button id="mPrev" aria-label="הקודמת">&#8594;</button>
           <button id="mNext" aria-label="הבאה">&#8592;</button>
@@ -289,6 +289,41 @@ body.text-edit [data-edit]:hover{outline-style:solid;background:color-mix(in srg
 </div>
 
 <div class="scrim" id="scrim"></div>
+
+<!-- פאנל הוספה ועריכה -->
+<aside class="drawer" id="addDrawer" aria-label="הוספת יצירה">
+  <div class="drawer-head">
+    <h2 id="formHeading">הוספת יצירה</h2>
+    <button class="close-x" style="position:static" data-close aria-label="סגירה">&times;</button>
+  </div>
+  <form class="drawer-body" id="artForm">
+    <div class="hint">זו גלריה לדוגמה. אפשר לנסות להוסיף יצירה ולראות איך היא נתלית על הקיר, אבל היא לא נשמרת באתר ותיעלם ברענון העמוד.</div>
+    <div class="field">
+      <label>תמונה</label>
+      <div class="seg" id="srcSeg">
+        <button type="button" class="active" data-src="file">העלאת קובץ</button>
+        <button type="button" data-src="url">הדבקת קישור</button>
+      </div>
+    </div>
+    <div id="srcFile">
+      <div class="drop" id="drop">גררו תמונה לכאן או לחצו לבחירה</div>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+    <div class="field" id="srcUrl" style="display:none">
+      <input type="url" id="urlInput" class="ltr" placeholder="https://...">
+      <small>קישור ישיר לתמונה (מסתיים בדרך כלל ב-jpg או png)</small>
+    </div>
+    <img class="preview" id="preview" alt="תצוגה מקדימה">
+    <div class="field"><label for="fTitle">שם היצירה</label><input type="text" id="fTitle" required></div>
+    <div class="field"><label for="fAuthor">שם היוצר/ת</label><input type="text" id="fAuthor" required></div>
+    <div class="field"><label for="fDesc">תיאור קצר</label><textarea id="fDesc"></textarea></div>
+    <div class="field"><label for="fPrompt">הפרומפט</label><textarea id="fPrompt" style="min-height:130px"></textarea></div>
+  </form>
+  <div class="drawer-foot">
+    <button class="copy-btn" style="flex:1" id="saveArt">שמירה בתערוכה</button>
+    <button class="btn" id="deleteArt" style="display:none">מחיקה</button>
+  </div>
+</aside>
 
 <!-- פאנל עיצוב -->
 <aside class="drawer" id="designDrawer" aria-label="עיצוב">
@@ -434,7 +469,8 @@ const KEY_ART='dailyPromptGallery.art.v4', KEY_DESIGN='dailyPromptGallery.design
 function load(key, fallback){ try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } }
 function save(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); return true; }catch(e){ toast('אין מספיק מקום לשמירה. נסו תמונה קטנה יותר או קישור.'); return false; } }
 
-let art = JSON.parse(JSON.stringify(DEFAULT_ART)); // תצוגה בלבד: אין הוספה או עריכה של יצירות
+// גלריה לדוגמה: הוספה ועריכה עובדות, אבל לא נשמרות. כל שינוי מוצג רק אצל המבקר ונעלם ברענון
+let art = JSON.parse(JSON.stringify(DEFAULT_ART));
 let design = Object.assign({}, DEFAULT_DESIGN, load(KEY_DESIGN, {}));
 design.overrides = design.overrides || {};
 
@@ -447,11 +483,11 @@ function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('sh
 /* ===== קיר ===== */
 const track = $('#track');
 function renderWall(){
-  if(!art.length){ track.innerHTML = '<div class="empty">התערוכה ריקה כרגע. </div>'; updateCounter(); return; }
+  if(!art.length){ track.innerHTML = '<div class="empty">התערוכה ריקה כרגע. לחצו על "הוסף יצירה לתערוכה" כדי להתחיל.</div>'; updateCounter(); return; }
   track.innerHTML = art.map((a,i)=>`
     <div class="piece" data-i="${i}">
       <div class="glow"></div><div class="lamp"></div><div class="beam"></div>
-      
+      <div class="piece-tools"><button class="tool-btn" data-act="edit" data-i="${i}" aria-label="עריכת ${esc(a.title)}" title="עריכה">ע</button></div>
       <div class="frame" tabindex="0" role="button" data-open="${i}" aria-label="פתיחת ${esc(a.title)}">
         <div class="mat"><img src="${esc(a.img)}" alt="${esc(a.title)}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src=FALLBACK_IMG"></div>
       </div>
@@ -484,6 +520,7 @@ let st; track.addEventListener('scroll', ()=>{ clearTimeout(st); st=setTimeout(u
 
 track.addEventListener('click', e=>{
   if(document.body.classList.contains('text-edit') && e.target.closest('[data-edit]')) return;
+  const ed = e.target.closest('[data-act="edit"]'); if(ed){ e.stopPropagation(); openForm(+ed.dataset.i); return; }
   const op = e.target.closest('[data-open]'); if(op) openModal(+op.dataset.open);
 });
 track.addEventListener('keydown', e=>{ const op=e.target.closest('[data-open]'); if(op && (e.key==='Enter'||e.key===' ')){ e.preventDefault(); openModal(+op.dataset.open);} });
@@ -517,7 +554,7 @@ $('#mClose').onclick=closeModal;
 overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 $('#mNext').onclick=()=>fillModal((mIdx+1)%art.length);
 $('#mPrev').onclick=()=>fillModal((mIdx-1+art.length)%art.length);
-
+$('#mEdit').onclick=()=>{ closeModal(); setTimeout(()=>openForm(mIdx),300); };
 $('#copyBtn').onclick=async()=>{
   const txt = art[mIdx].prompt||''; let ok=false;
   try{ await navigator.clipboard.writeText(txt); ok=true; }catch(e){
@@ -541,6 +578,77 @@ function openDrawer(el){ closeDrawers(); el.classList.add('open'); scrim.classLi
 function closeDrawers(){ document.querySelectorAll('.drawer.open').forEach(d=>d.classList.remove('open')); scrim.classList.remove('show'); }
 scrim.onclick=closeDrawers;
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=closeDrawers);
+
+/* ===== טופס הוספה ועריכה ===== */
+let editIdx=null, pendingImg=null, srcMode='file';
+function setSrc(mode){
+  srcMode=mode;
+  document.querySelectorAll('#srcSeg button').forEach(b=>b.classList.toggle('active',b.dataset.src===mode));
+  $('#srcFile').style.display = mode==='file'?'':'none';
+  $('#srcUrl').style.display = mode==='url'?'':'none';
+}
+document.querySelectorAll('#srcSeg button').forEach(b=>b.onclick=()=>setSrc(b.dataset.src));
+function showPreview(src){ const p=$('#preview'); if(src){ p.src=src; p.classList.add('show'); } else { p.removeAttribute('src'); p.classList.remove('show'); } }
+
+function openForm(i){
+  editIdx = (typeof i==='number') ? i : null;
+  const a = editIdx!==null ? art[editIdx] : {img:'',title:'',author:'',desc:'',prompt:''};
+  $('#formHeading').textContent = editIdx!==null ? 'עריכת יצירה' : 'הוספת יצירה';
+  $('#fTitle').value=a.title; $('#fAuthor').value=a.author; $('#fDesc').value=a.desc||''; $('#fPrompt').value=a.prompt||'';
+  pendingImg = a.img||null;
+  const isUrl = a.img && /^https?:/i.test(a.img);
+  setSrc(isUrl?'url':'file'); $('#urlInput').value = isUrl ? a.img : '';
+  $('#fileInput').value=''; showPreview(a.img);
+  $('#deleteArt').style.display = editIdx!==null ? '' : 'none';
+  openDrawer($('#addDrawer'));
+  setTimeout(()=>$('#fTitle').focus(),300);
+}
+$('#openAdd').onclick=()=>openForm();
+
+function readImage(file){
+  return new Promise((res,rej)=>{
+    if(!file || !file.type.startsWith('image/')) return rej('not image');
+    const fr=new FileReader();
+    fr.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        const max=1400; let {width:w,height:h}=img;
+        if(w>max||h>max){ const r=Math.min(max/w,max/h); w=Math.round(w*r); h=Math.round(h*r); }
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
+        res(c.toDataURL('image/jpeg',0.85));
+      };
+      img.onerror=()=>res(fr.result);
+      img.src=fr.result;
+    };
+    fr.onerror=rej; fr.readAsDataURL(file);
+  });
+}
+async function handleFile(f){ try{ pendingImg = await readImage(f); showPreview(pendingImg); }catch(e){ toast('הקובץ אינו תמונה'); } }
+const drop=$('#drop');
+drop.onclick=()=>$('#fileInput').click();
+$('#fileInput').onchange=e=>handleFile(e.target.files[0]);
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>handleFile(e.dataTransfer.files[0]));
+$('#urlInput').addEventListener('input',e=>{ const v=e.target.value.trim(); pendingImg=v||null; showPreview(v); });
+
+$('#saveArt').onclick=()=>{
+  const title=$('#fTitle').value.trim(), author=$('#fAuthor').value.trim();
+  if(!pendingImg){ toast('צריך להוסיף תמונה'); return; }
+  if(!title){ toast('צריך למלא שם יצירה'); $('#fTitle').focus(); return; }
+  if(!author){ toast('צריך למלא שם יוצר/ת'); $('#fAuthor').focus(); return; }
+  const item={ id: editIdx!==null ? art[editIdx].id : 'a'+Date.now(), img:pendingImg, title, author, desc:$('#fDesc').value.trim(), prompt:$('#fPrompt').value.trim() };
+    let target;
+  if(editIdx!==null){ art[editIdx]=item; target=editIdx; } else { art.push(item); target=art.length-1; }
+  renderWall(); closeDrawers(); toast(editIdx!==null?'היצירה עודכנה לתצוגה בלבד':'היצירה נוספה לתצוגה. זו גלריה לדוגמה, ולכן היא תיעלם ברענון');
+  setTimeout(()=>goTo(target),350);
+};
+$('#deleteArt').onclick=()=>{
+  if(editIdx===null) return;
+  if(!confirm('למחוק את היצירה מהתערוכה?')) return;
+  art.splice(editIdx,1); renderWall(); closeDrawers(); toast('היצירה נמחקה');
+};
 
 /* ===== עיצוב כללי ===== */
 function fillSelect(sel, list){ sel.innerHTML = list.map(f=>`<option value="${esc(f[0])}" style="font-family:${esc(f[0])}">${f[1]}</option>`).join(''); }
